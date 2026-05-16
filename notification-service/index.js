@@ -45,7 +45,6 @@ function sendNotification(call, callback) {
       type
     });
 
-    // Simulation d'envoi (SMS/Push)
     console.log(`[Notif-gRPC] 📱 Notification envoyée à ${recipient_type} ${recipient_id}: "${message}"`);
     callback(null, notif);
 
@@ -67,52 +66,92 @@ function getNotifications(call, callback) {
   }
 }
 
-// ─── Handler Kafka: traitement des événements métier ─────────────────────────
+// ─── Handlers Kafka: traitement des événements métier ────────────────────────
+
+function handleDeliveryAssigned(data) {
+  // Notifier le client
+  db.saveNotification({
+    notification_id: uuidv4(),
+    recipient_id:    data.client_id || 'unknown',
+    recipient_type:  'client',
+    message:         `Votre commande ${data.order_id} a été assignée au livreur ${data.driver_name} (${data.driver_phone})`,
+    order_id:        data.order_id,
+    type:            'DRIVER_ASSIGNED'
+  });
+
+  // Notifier le livreur
+  db.saveNotification({
+    notification_id: uuidv4(),
+    recipient_id:    data.driver_id,
+    recipient_type:  'driver',
+    message:         `Nouvelle course assignée: commande ${data.order_id}`,
+    order_id:        data.order_id,
+    type:            'DRIVER_ASSIGNED'
+  });
+
+  console.log(`[Notif-Kafka] 📱 Notifications "DRIVER_ASSIGNED" créées pour commande ${data.order_id}`);
+}
+
+function handleOrderStatusUpdated(data) {
+  const statusMessages = {
+    ASSIGNED:    'Votre commande a été prise en charge par un livreur',
+    IN_PROGRESS: 'Votre livreur est en route !',
+    DELIVERED:   'Votre commande a été livrée. Merci !',
+    CANCELLED:   'Votre commande a été annulée.'
+  };
+
+  const message = statusMessages[data.new_status] || `Statut de votre commande: ${data.new_status}`;
+
+  db.saveNotification({
+    notification_id: uuidv4(),
+    recipient_id:    data.client_id || 'unknown',
+    recipient_type:  'client',
+    message,
+    order_id:        data.order_id,
+    type:            'STATUS_UPDATE'
+  });
+
+  console.log(`[Notif-Kafka] 📱 Notification "STATUS_UPDATE" → ${data.new_status} pour commande ${data.order_id}`);
+}
+
+// ── AJOUT: handler pour driver.location.updated ───────────────────────────────
+function handleLocationUpdated(data) {
+  const { driver_id, latitude, longitude } = data;
+
+  // Arrondir à 4 décimales pour un message lisible
+  const lat = parseFloat(latitude).toFixed(4);
+  const lng = parseFloat(longitude).toFixed(4);
+
+  db.saveNotification({
+    notification_id: uuidv4(),
+    recipient_id:    driver_id,
+    recipient_type:  'driver',
+    message:         `Position GPS mise à jour: latitude ${lat}, longitude ${lng}`,
+    order_id:        data.order_id || '',
+    type:            'LOCATION_UPDATE'
+  });
+
+  console.log(`[Notif-Kafka] 📍 Position livreur ${driver_id} enregistrée: (${lat}, ${lng})`);
+}
+
+// ─── Dispatcher Kafka ─────────────────────────────────────────────────────────
 function handleKafkaEvent(topic, data) {
-  if (topic === TOPICS.DELIVERY_ASSIGNED) {
-    // Un livreur a été assigné → notifier le client ET le livreur
-    db.saveNotification({
-      notification_id: uuidv4(),
-      recipient_id: data.client_id || 'unknown',
-      recipient_type: 'client',
-      message: `Votre commande ${data.order_id} a été assignée au livreur ${data.driver_name} (${data.driver_phone})`,
-      order_id: data.order_id,
-      type: 'DRIVER_ASSIGNED'
-    });
+  switch (topic) {
+    case TOPICS.DELIVERY_ASSIGNED:
+      handleDeliveryAssigned(data);
+      break;
 
-    db.saveNotification({
-      notification_id: uuidv4(),
-      recipient_id: data.driver_id,
-      recipient_type: 'driver',
-      message: `Nouvelle course assignée: commande ${data.order_id}`,
-      order_id: data.order_id,
-      type: 'DRIVER_ASSIGNED'
-    });
+    case TOPICS.ORDER_STATUS_UPDATED:
+      handleOrderStatusUpdated(data);
+      break;
 
-    console.log(`[Notif-Kafka] 📱 Notifications "DRIVER_ASSIGNED" créées pour commande ${data.order_id}`);
-  }
+    // ── AJOUT ──────────────────────────────────────────────────────────────
+    case TOPICS.LOCATION_UPDATED:
+      handleLocationUpdated(data);
+      break;
 
-  if (topic === TOPICS.ORDER_STATUS_UPDATED) {
-    // Statut mis à jour → notifier le client
-    const statusMessages = {
-      ASSIGNED:    'Votre commande a été prise en charge par un livreur',
-      IN_PROGRESS: 'Votre livreur est en route !',
-      DELIVERED:   'Votre commande a été livrée. Merci !',
-      CANCELLED:   'Votre commande a été annulée.'
-    };
-
-    const message = statusMessages[data.new_status] || `Statut de votre commande: ${data.new_status}`;
-
-    db.saveNotification({
-      notification_id: uuidv4(),
-      recipient_id: data.client_id || 'unknown',
-      recipient_type: 'client',
-      message,
-      order_id: data.order_id,
-      type: 'STATUS_UPDATE'
-    });
-
-    console.log(`[Notif-Kafka] 📱 Notification "STATUS_UPDATE" → ${data.new_status} pour commande ${data.order_id}`);
+    default:
+      console.warn(`[Notif-Kafka] Topic inconnu reçu: "${topic}"`);
   }
 }
 
@@ -140,7 +179,7 @@ async function main() {
       server.start();
       console.log(`\n✅ Notification Service (gRPC) démarré sur le port ${port}`);
       console.log(`   DB: SQLite3 (notifications.db)`);
-      console.log(`   Kafka Topics consommés: delivery.assigned, order.status.updated\n`);
+      console.log(`   Kafka Topics consommés: delivery.assigned, order.status.updated, driver.location.updated\n`);
     }
   );
 }

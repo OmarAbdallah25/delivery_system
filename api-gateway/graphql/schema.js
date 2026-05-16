@@ -5,9 +5,11 @@ const {
   grpcGetOrder,
   grpcUpdateOrderStatus,
   grpcListOrders,
+  grpcDeleteOrder,
   grpcRegisterDriver,
   grpcGetDriver,
   grpcUpdateLocation,
+  grpcUpdateAvailability,
   grpcAssignDriver,
   grpcGetAvailableDrivers,
   grpcGetNotifications
@@ -53,6 +55,12 @@ const typeDefs = gql`
     created_at:      String
   }
 
+  """Résultat d'une opération de suppression"""
+  type DeleteResult {
+    success: Boolean!
+    message: String!
+  }
+
   # ── Queries (lecture) ──────────────────────────────────────────────────────
   type Query {
     "Récupérer une commande par son ID"
@@ -85,6 +93,9 @@ const typeDefs = gql`
     "Mettre à jour le statut d'une commande"
     updateOrderStatus(order_id: ID!, status: String!): Order
 
+    "Supprimer une commande"
+    deleteOrder(order_id: ID!): DeleteResult
+
     "Enregistrer un nouveau livreur"
     registerDriver(
       name:    String!
@@ -94,6 +105,9 @@ const typeDefs = gql`
 
     "Mettre à jour la position GPS d'un livreur"
     updateDriverLocation(driver_id: ID!, latitude: Float!, longitude: Float!): Driver
+
+    "Modifier la disponibilité d'un livreur"
+    updateDriverAvailability(driver_id: ID!, available: Boolean!): Driver
 
     "Assigner manuellement un livreur à une commande"
     assignDriver(driver_id: ID!, order_id: ID!): Driver
@@ -164,6 +178,15 @@ const resolvers = {
       }
     },
 
+    // ── AJOUT: deleteOrder ──────────────────────────────────────────────────
+    deleteOrder: async (_, { order_id }) => {
+      try {
+        return await grpcDeleteOrder({ order_id });
+      } catch (err) {
+        throw new Error(err.message);
+      }
+    },
+
     registerDriver: async (_, args) => {
       try {
         return await grpcRegisterDriver(args);
@@ -175,6 +198,15 @@ const resolvers = {
     updateDriverLocation: async (_, { driver_id, latitude, longitude }) => {
       try {
         return await grpcUpdateLocation({ driver_id, latitude, longitude });
+      } catch (err) {
+        throw new Error(err.message);
+      }
+    },
+
+    // ── AJOUT: updateDriverAvailability ────────────────────────────────────
+    updateDriverAvailability: async (_, { driver_id, available }) => {
+      try {
+        return await grpcUpdateAvailability({ driver_id, available });
       } catch (err) {
         throw new Error(err.message);
       }

@@ -9,8 +9,9 @@ const kafka = new Kafka({
 const consumer = kafka.consumer({ groupId: 'notification-service-group' });
 
 const TOPICS = {
-  DELIVERY_ASSIGNED:   'delivery.assigned',     // Consommateur
-  ORDER_STATUS_UPDATED:'order.status.updated'   // Consommateur
+  DELIVERY_ASSIGNED:    'delivery.assigned',       // Consommateur
+  ORDER_STATUS_UPDATED: 'order.status.updated',    // Consommateur
+  LOCATION_UPDATED:     'driver.location.updated'  // Consommateur — AJOUT
 };
 
 // Callback injecté depuis index.js
@@ -21,8 +22,16 @@ async function startConsumer(handleEvent) {
 
   try {
     await consumer.connect();
-    // S'abonner aux deux topics
-    await consumer.subscribe({ topics: [TOPICS.DELIVERY_ASSIGNED, TOPICS.ORDER_STATUS_UPDATED], fromBeginning: false });
+
+    // S'abonner aux trois topics
+    await consumer.subscribe({
+      topics: [
+        TOPICS.DELIVERY_ASSIGNED,
+        TOPICS.ORDER_STATUS_UPDATED,
+        TOPICS.LOCATION_UPDATED       // ── AJOUT
+      ],
+      fromBeginning: false
+    });
 
     await consumer.run({
       eachMessage: async ({ topic, message }) => {
@@ -35,7 +44,7 @@ async function startConsumer(handleEvent) {
       }
     });
 
-    console.log('[Notif-Kafka] Consommateur démarré - écoute: delivery.assigned, order.status.updated');
+    console.log('[Notif-Kafka] Consommateur démarré - écoute: delivery.assigned, order.status.updated, driver.location.updated');
   } catch (err) {
     console.error('[Notif-Kafka] Erreur consommateur:', err.message);
   }
