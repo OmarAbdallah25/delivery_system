@@ -1,0 +1,16 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Microservice de notifications - SQLite3 + gRPC + Kafka Consumer",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.14",
+    "@grpc/proto-loader": "^0.7.10",
+    "better-sqlite3": "^9.4.3",
+    "kafkajs": "^2.2.4",
+    "uuid": "^9.0.0"
+  }
+}
